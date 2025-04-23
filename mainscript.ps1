@@ -136,6 +136,21 @@ if ($openAiProvisioningState -notin @("Succeeded", "Failed", "Canceled", "Delete
 }
 Write-Log "OpenAI resource provisioning state is terminal: $openAiProvisioningState"
 
+# Set path to your parameters file
+$paramFilePath = Join-Path $deployPath "infra\main.parameters.json"
+
+# Load the JSON
+$paramJson = Get-Content $paramFilePath -Raw | ConvertFrom-Json
+
+# Inject into deploymentTags
+if (-not $paramJson.parameters.deploymentTags) {
+    $paramJson.parameters.deploymentTags = @{ value = @{} }
+}
+$paramJson.parameters.deploymentTags.value["LabInstance"] = $labInstanceId
+
+# Save the updated JSON back to the file
+$paramJson | ConvertTo-Json -Depth 10 | Set-Content -Path $paramFilePath -Encoding UTF8
+Write-Log "Injected LabInstance deployment tag into main.parameters.json: $labInstanceId"
 
 
 Write-Log "Starting azd provision"
