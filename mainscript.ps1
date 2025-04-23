@@ -103,6 +103,18 @@ Write-Log "Configured azd env variables"
 azd env set AZURE_TAGS "LabInstance=$labInstanceId" | Out-Null
 Write-Log "Set deployment tag: LabInstance=$labInstanceId"
 
+# Grant the signed-in user Get/List permissions on the Key Vault for Bastion secret access
+try {
+    $userObjectId = az ad signed-in-user show --query id -o tsv
+    az keyvault set-policy `
+        --name $newKvName `
+        --object-id $userObjectId `
+        --secret-permissions get list | Out-Null
+    Write-Log "Granted current user (Object ID: $userObjectId) access to Key Vault secrets"
+} catch {
+    Write-Log "[ERROR] Failed to assign Key Vault access policy: $_"
+}
+
 
 
 # === Wait for OpenAI provisioning state to be terminal ===
