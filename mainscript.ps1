@@ -1,4 +1,4 @@
-﻿$logFile = "C:\labfiles\progress.log"
+$logFile = "C:\labfiles\progress.log"
 
 function Write-Log($msg) {
     $stamp = (Get-Date).ToString("yyyy-MM-dd HHmmss")
@@ -99,6 +99,10 @@ azd env set AZURE_SUBSCRIPTION_ID $subscriptionId | Out-Null
 azd env set AZURE_LOCATION $location | Out-Null
 az account set --subscription $subscriptionId | Out-Null
 Write-Log "Configured azd env variables"
+
+azd env set AZURE_TAGS "LabInstance=$labInstanceId" | Out-Null
+Write-Log "Set deployment tag: LabInstance=$labInstanceId"
+
 
 
 # === Wait for OpenAI provisioning state to be terminal ===
