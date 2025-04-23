@@ -139,17 +139,22 @@ Write-Log "OpenAI resource provisioning state is terminal: $openAiProvisioningSt
 # Path to the parameters file
 $paramFilePath = Join-Path $deployPath "infra\main.parameters.json"
 
-# Load and parse the JSON
-$paramJsonRaw = Get-Content $paramFilePath -Raw
-$paramJson = $paramJsonRaw | ConvertFrom-Json
+# Load and parse the JSON into a hashtable-like object
+$paramJson = Get-Content -Raw -Path $paramFilePath | ConvertFrom-Json
 
-# Modify the existing deploymentTags.value property
-$paramJson.parameters.deploymentTags.value["LabInstance"] = $labInstanceId
+# Create a hashtable for deploymentTags if needed
+if (-not $paramJson.parameters.deploymentTags) {
+    $paramJson.parameters.deploymentTags = @{ value = @{} }
+}
 
-# Convert back to JSON with correct indentation and depth
+# Overwrite or set the LabInstance tag in the value object
+$paramJson.parameters.deploymentTags.value = @{ LabInstance = $labInstanceId }
+
+# Write the updated JSON back to the file
 $paramJson | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 -Path $paramFilePath
 
-Write-Log "Successfully injected LabInstance=$labInstanceId into deploymentTags"
+Write-Log "Successfully set deploymentTags: LabInstance = $labInstanceId"
+
 
 
 Write-Log "Starting azd provision"
