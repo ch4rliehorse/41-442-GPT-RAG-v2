@@ -103,38 +103,6 @@ Write-Log "Configured azd env variables"
 azd env set AZURE_TAGS "LabInstance=$labInstanceId" | Out-Null
 Write-Log "Set deployment tag: LabInstance=$labInstanceId"
 
-# === Wait for Key Vault to be ready ===
-Write-Log "Waiting for Key Vault $newKvName to become available..."
-
-$maxWait = 10
-for ($i = 0; $i -lt $maxWait; $i++) {
-    try {
-        $kvExists = az keyvault show --name $newKvName --query "name" -o tsv
-        if ($kvExists) { break }
-    } catch { }
-    Start-Sleep -Seconds 10
-}
-
-# Grant the lab user access to Key Vault secrets for Bastion login
-$labUserUPN = "User1-$labInstanceId@lodsprodmca.onmicrosoft.com"
-
-try {
-    $labUserObjectId = az ad user show --id $labUserUPN --query id -o tsv
-
-    if ($labUserObjectId) {
-        az keyvault set-policy `
-            --name $newKvName `
-            --object-id $labUserObjectId `
-            --secret-permissions get list | Out-Null
-
-        Write-Log "Granted Key Vault secret access to lab user $labUserUPN (Object ID: $labUserObjectId)"
-    } else {
-        Write-Log "[ERROR] Could not retrieve Object ID for lab user $labUserUPN"
-    }
-} catch {
-    Write-Log "[ERROR] Failed to set Key Vault policy for lab user: $_"
-}
-
 
 # === Wait for OpenAI provisioning state to be terminal ===
 $maxAttempts = 20
@@ -186,14 +154,46 @@ $paramJson | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 -Path $paramF
 
 Write-Log "Successfully set deploymentTags: LabInstance = $labInstanceId"
 
-
-
 Write-Log "Starting azd provision"
 azd provision --environment dev-$labInstanceId 2>&1 | Tee-Object -FilePath $logFile -Append
 Write-Log "azd provision complete"
 $resourceGroup = az group list --query "[?contains(name, 'rg-dev-$labInstanceId')].name" -o tsv
 azd env set AZURE_RESOURCE_GROUP $resourceGroup | Out-Null
 Write-Log "Set resource group: $resourceGroup"
+
+
+
+# Find the Key Vault with a name starting with 'bastionkv'
+$bastionKvName = az resource list --resource-group $resourceGroup `
+    --resource-type "Microsoft.KeyVault/vaults" `
+    --query "[?starts_with(name, 'bastionkv')].name" -o tsv
+
+if ($bastionKvName) {
+    $bastionKvScope = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.KeyVault/vaults/$bastionKvName"
+    $labUserUPN = "User1-$labInstanceId@lodsprodmca.onmicrosoft.com"
+
+    try {
+        $labUserObjectId = az ad user show --id $labUserUPN --query id -o tsv
+
+        if ($labUserObjectId) {
+            az role assignment create `
+                --assignee-object-id $labUserObjectId `
+                --assignee-principal-type User `
+                --role "Key Vault Secrets User" `
+                --scope $bastionKvScope | Out-Null
+
+            Write-Log "Assigned 'Key Vault Secrets User' role to $labUserUPN on $bastionKvName"
+        } else {
+            Write-Log "[ERROR] Could not find lab user $labUserUPN"
+        }
+    } catch {
+        Write-Log "[ERROR] Failed to assign RBAC on Bastion Key Vault: $_"
+    }
+} else {
+    Write-Log "[ERROR] Could not find Bastion Key Vault in resource group $resourceGroup"
+}
+
+
 
 # Retry OpenAI provisioning
 $openAiAccountName = az resource list --resource-group $resourceGroup `
