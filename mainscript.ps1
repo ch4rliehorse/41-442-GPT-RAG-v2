@@ -103,16 +103,34 @@ Write-Log "Configured azd env variables"
 azd env set AZURE_TAGS "LabInstance=$labInstanceId" | Out-Null
 Write-Log "Set deployment tag: LabInstance=$labInstanceId"
 
-# Grant the signed-in user Get/List permissions on the Key Vault for Bastion secret access
+# === Wait for Key Vault to be ready ===
+Write-Log "Waiting for Key Vault $newKvName to become available..."
+
+$maxWait = 10
+for ($i = 0; $i -lt $maxWait; $i++) {
+    try {
+        $kvExists = az keyvault show --name $newKvName --query "name" -o tsv
+        if ($kvExists) { break }
+    } catch { }
+    Start-Sleep -Seconds 10
+}
+
+# === Grant current user access to secrets ===
 try {
     $userObjectId = az ad signed-in-user show --query id -o tsv
-    az keyvault set-policy `
-        --name $newKvName `
-        --object-id $userObjectId `
-        --secret-permissions get list | Out-Null
-    Write-Log "Granted current user (Object ID: $userObjectId) access to Key Vault secrets"
+
+    if ($userObjectId) {
+        az keyvault set-policy `
+            --name $newKvName `
+            --object-id $userObjectId `
+            --secret-permissions get list | Out-Null
+
+        Write-Log "Granted secret access to Key Vault $newKvName for user $userObjectId"
+    } else {
+        Write-Log "[ERROR] Could not retrieve signed-in user object ID."
+    }
 } catch {
-    Write-Log "[ERROR] Failed to assign Key Vault access policy: $_"
+    Write-Log "[ERROR] Failed to set Key Vault policy: $_"
 }
 
 
