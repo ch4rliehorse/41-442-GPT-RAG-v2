@@ -297,5 +297,13 @@ if ($webAppName) {
 }
 Write-Log "Script completed at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 
-Add-Type -AssemblyName PresentationFramework
-[System.Windows.MessageBox]::Show("Azure deployment is complete.", "Deployment Done", 'OK', 'Information')
+# Show a final notification
+$popupScript = @"
+Set objShell = CreateObject("WScript.Shell")
+objShell.Popup "Azure deployment is complete!", 10, "Deployment Finished", 64
+"@
+
+$popupPath = "$env:TEMP\notify_done.vbs"
+Set-Content -Path $popupPath -Value $popupScript -Encoding ASCII
+Start-Process "wscript.exe" -ArgumentList $popupPath
+
