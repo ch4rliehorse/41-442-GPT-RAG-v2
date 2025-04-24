@@ -104,37 +104,6 @@ azd env set AZURE_TAGS "LabInstance=$labInstanceId" | Out-Null
 Write-Log "Set deployment tag: LabInstance=$labInstanceId"
 
 
-# === Wait for OpenAI provisioning state to be terminal ===
-$maxAttempts = 20
-$delaySeconds = 35
-$openAiProvisioningState = ""
-
-Write-Log "Waiting for OpenAI resource to reach a terminal state..."
-
-for ($i = 1; $i -le $maxAttempts; $i++) {
-    try {
-        $openAiProvisioningState = az cognitiveservices account show `
-            --name "oai0-$labInstanceId" `
-            --resource-group "rg-dev-$labInstanceId" `
-            --query "provisioningState" -o tsv
-
-        Write-Log "OpenAI provisioning state: $openAiProvisioningState (Attempt $i)"
-
-        if ($openAiProvisioningState -in @("Succeeded", "Failed", "Canceled", "Deleted")) {
-            break
-        }
-    } catch {
-        Write-Log "[WARNING] Failed to get provisioning state: $_"
-    }
-
-    Start-Sleep -Seconds $delaySeconds
-}
-
-if ($openAiProvisioningState -notin @("Succeeded", "Failed", "Canceled", "Deleted")) {
-    Write-Log "[WARNING] OpenAI resource provisioning state not terminal after $maxAttempts attempts. Proceeding anyway..."
-}
-Write-Log "OpenAI resource provisioning state is terminal: $openAiProvisioningState"
-
 # Path to the parameters file
 $paramFilePath = Join-Path $deployPath "infra\main.parameters.json"
 
@@ -161,7 +130,66 @@ $resourceGroup = az group list --query "[?contains(name, 'rg-dev-$labInstanceId'
 azd env set AZURE_RESOURCE_GROUP $resourceGroup | Out-Null
 Write-Log "Set resource group: $resourceGroup"
 
+Write-Log "azd provision complete"
+$resourceGroup = az group list --query "[?contains(name, 'rg-dev-$labInstanceId')].name" -o tsv
+azd env set AZURE_RESOURCE_GROUP $resourceGroup | Out-Null
+Write-Log "Set resource group: $resourceGroup"
 
+# === Retry OpenAI provisioning after azd provision ===
+Write-Log "Checking OpenAI provisioning state after provisioning..."
+
+$openAiAccountName = az resource list --resource-group $resourceGroup `
+    --resource-type "Microsoft.CognitiveServices/accounts" `
+    --query "[?contains(name, 'oai0')].name" -o tsv
+
+$openAiProvisioningState = ""
+$maxAttempts = 10
+$delaySeconds = 30
+
+for ($i = 1; $i -le $maxAttempts; $i++) {
+    if (-not $openAiAccountName) {
+        Write-Log "[ERROR] Could not find OpenAI resource after provision."
+        break
+    }
+
+    try {
+        $openAiProvisioningState = az cognitiveservices account show `
+            --name $openAiAccountName `
+            --resource-group $resourceGroup `
+            --query "provisioningState" -o tsv
+
+        Write-Log "Post-provision OpenAI provisioning state: $openAiProvisioningState (Attempt $i)"
+
+        if ($openAiProvisioningState -in @("Succeeded", "Failed", "Canceled", "Deleted")) {
+            break
+        }
+    } catch {
+        Write-Log "[WARNING] Failed to retrieve OpenAI provisioning state: $_"
+    }
+
+    Start-Sleep -Seconds $delaySeconds
+}
+
+if ($openAiProvisioningState -ne "Succeeded") {
+    Write-Log "[WARNING] OpenAI resource not in 'Succeeded' state — running fallback OpenAI provisioning script."
+
+    $fallbackScriptPath = "$env:TEMP\openai.ps1"
+    Invoke-WebRequest `
+        -Uri "https://raw.githubusercontent.com/LODSContent/ProServ/refs/heads/main/41-442%20MS%20RAG%20GPT/openai.ps1" `
+        -OutFile $fallbackScriptPath -UseBasicParsing
+
+    & $fallbackScriptPath `
+        -subscriptionId $subscriptionId `
+        -resourceGroup $resourceGroup `
+        -location $location `
+        -labInstanceId $labInstanceId `
+        -clientId $clientId `
+        -clientSecret $clientSecret `
+        -tenantId $tenantId `
+        -logFile $logFile
+
+    Write-Log "Retry fallback OpenAI provisioning executed"
+}
 
 # Find the Key Vault with a name starting with 'bastionkv'
 $bastionKvName = az resource list --resource-group $resourceGroup `
