@@ -268,3 +268,6 @@ if ($webAppName) {
     Write-Log "Web App not found."
 }
 Write-Log "Script completed at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+
+Add-Type -AssemblyName PresentationFramework
+[System.Windows.MessageBox]::Show("Azure deployment is complete.", "Deployment Done", 'OK', 'Information')
