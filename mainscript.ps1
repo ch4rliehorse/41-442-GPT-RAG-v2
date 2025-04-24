@@ -115,24 +115,25 @@ for ($i = 0; $i -lt $maxWait; $i++) {
     Start-Sleep -Seconds 10
 }
 
-# === Grant current user access to secrets ===
-try {
-    $userObjectId = az ad signed-in-user show --query id -o tsv
+# Grant the lab user access to Key Vault secrets for Bastion login
+$labUserUPN = "User1-$labInstanceId@lodsprodmca.onmicrosoft.com"
 
-    if ($userObjectId) {
+try {
+    $labUserObjectId = az ad user show --id $labUserUPN --query id -o tsv
+
+    if ($labUserObjectId) {
         az keyvault set-policy `
             --name $newKvName `
-            --object-id $userObjectId `
+            --object-id $labUserObjectId `
             --secret-permissions get list | Out-Null
 
-        Write-Log "Granted secret access to Key Vault $newKvName for user $userObjectId"
+        Write-Log "Granted Key Vault secret access to lab user $labUserUPN (Object ID: $labUserObjectId)"
     } else {
-        Write-Log "[ERROR] Could not retrieve signed-in user object ID."
+        Write-Log "[ERROR] Could not retrieve Object ID for lab user $labUserUPN"
     }
 } catch {
-    Write-Log "[ERROR] Failed to set Key Vault policy: $_"
+    Write-Log "[ERROR] Failed to set Key Vault policy for lab user: $_"
 }
-
 
 
 # === Wait for OpenAI provisioning state to be terminal ===
