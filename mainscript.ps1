@@ -296,37 +296,3 @@ if ($webAppName) {
     Write-Log "Web App not found."
 }
 Write-Log "Script completed at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-
-# Show a final notification
-$toastScriptPath = "$env:TEMP\show_toast.ps1"
-$toastScript = @'
-[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
-
-$template = @"
-<toast scenario='reminder'>
-  <visual>
-    <binding template='ToastGeneric'>
-      <text>Deployment Complete</text>
-      <text>Your Azure environment has finished provisioning successfully.</text>
-    </binding>
-  </visual>
-</toast>
-"@
-
-$xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-$xml.LoadXml($template)
-$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
-$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("AzureLabSetup")
-$notifier.Show($toast)
-'@
-
-Set-Content -Path $toastScriptPath -Value $toastScript -Encoding UTF8
-
-# Schedule the toast to run under the current user context
-$taskName = "AzureLabNotification"
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$toastScriptPath`""
-$principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType Interactive -RunLevel Highest
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(5)
-
-Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Trigger $trigger -Force
-
