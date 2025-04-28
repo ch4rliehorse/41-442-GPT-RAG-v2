@@ -191,68 +191,35 @@ if ($openAiProvisioningState -ne "Succeeded") {
     Write-Log "Retry fallback OpenAI provisioning executed"
 }
 
-# === Assign Role Permissions ===
-Write-Log "Beginning RBAC role assignments..."
-
-# Get lab user UPN and object ID
-$labUserUPN = "User1-$labInstanceId@lodsprodmca.onmicrosoft.com"
-try {
-    $labUserObjectId = az ad user show --id $labUserUPN --query id -o tsv
-    if (-not $labUserObjectId) {
-        Write-Log "[ERROR] Could not find lab user $labUserUPN"
-        return
-    }
-    Write-Log "Retrieved lab user object ID: $labUserObjectId"
-} catch {
-    Write-Log "[ERROR] Failed to retrieve lab user object ID: $_"
-    return
-}
-
-# Assign 'Key Vault Secrets User' to lab user for all Key Vaults
-$keyVaults = az resource list --resource-group $resourceGroup `
+# Find the Key Vault with a name starting with 'bastionkv'
+$bastionKvName = az resource list --resource-group $resourceGroup `
     --resource-type "Microsoft.KeyVault/vaults" `
-    --query "[].name" -o tsv
+    --query "[?starts_with(name, 'bastionkv')].name" -o tsv
 
-foreach ($kv in $keyVaults) {
-    $kvScope = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.KeyVault/vaults/$kv"
+if ($bastionKvName) {
+    $bastionKvScope = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.KeyVault/vaults/$bastionKvName"
+    $labUserUPN = "User1-$labInstanceId@lodsprodmca.onmicrosoft.com"
+
     try {
-        az role assignment create `
-            --assignee-object-id $labUserObjectId `
-            --assignee-principal-type User `
-            --role "Key Vault Secrets User" `
-            --scope $kvScope | Out-Null
-        Write-Log "Assigned 'Key Vault Secrets User' to $labUserUPN on Key Vault: $kv"
+        $labUserObjectId = az ad user show --id $labUserUPN --query id -o tsv
+
+        if ($labUserObjectId) {
+            az role assignment create `
+                --assignee-object-id $labUserObjectId `
+                --assignee-principal-type User `
+                --role "Key Vault Secrets User" `
+                --scope $bastionKvScope | Out-Null
+
+            Write-Log "Assigned 'Key Vault Secrets User' role to $labUserUPN on $bastionKvName"
+        } else {
+            Write-Log "[ERROR] Could not find lab user $labUserUPN"
+        }
     } catch {
-        Write-Log "[ERROR] Failed to assign Key Vault role on $kv: $_"
+        Write-Log "[ERROR] Failed to assign RBAC on Bastion Key Vault: $_"
     }
+} else {
+    Write-Log "[ERROR] Could not find Bastion Key Vault in resource group $resourceGroup"
 }
-
-# Assign 'Storage Blob Data Contributor' to lab user
-$storageScope = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Storage/storageAccounts/$storageAccount"
-try {
-    az role assignment create `
-        --assignee-object-id $labUserObjectId `
-        --assignee-principal-type User `
-        --role "Storage Blob Data Contributor" `
-        --scope $storageScope | Out-Null
-    Write-Log "Assigned 'Storage Blob Data Contributor' to $labUserUPN on Storage Account: $storageAccount"
-} catch {
-    Write-Log "[ERROR] Failed to assign storage role to lab user: $_"
-}
-
-# Assign 'Storage Blob Data Contributor' to service principal
-$objectId = az ad sp show --id $clientId --query id -o tsv
-try {
-    az role assignment create `
-        --assignee-object-id $objectId `
-        --assignee-principal-type ServicePrincipal `
-        --role "Storage Blob Data Contributor" `
-        --scope $storageScope | Out-Null
-    Write-Log "Assigned 'Storage Blob Data Contributor' to service principal ($clientId) on Storage Account: $storageAccount"
-} catch {
-    Write-Log "[ERROR] Failed to assign storage role to service principal: $_"
-}
-
 
 
 # Retry OpenAI provisioning
