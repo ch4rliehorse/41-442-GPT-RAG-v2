@@ -266,6 +266,29 @@ az role assignment create `
 
 Write-Log "Assigned Storage Blob Data Contributor"
 
+# Assign the Blob Storage Data Contributor role to the user (in addition to the service principal)
+Write-Log "Assigning Blob Storage Data Contributor to the user..."
+
+$labUserUPN = "User1-$labInstanceId@lodsprodmca.onmicrosoft.com"  # Replace with the correct username if different
+try {
+    $labUserObjectId = az ad user show --id $labUserUPN --query id -o tsv
+
+    if ($labUserObjectId) {
+        az role assignment create `
+            --assignee-object-id $labUserObjectId `
+            --assignee-principal-type User `
+            --role "Storage Blob Data Contributor" `
+            --scope "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Storage/storageAccounts/$storageAccount" | Out-Null
+
+        Write-Log "Assigned 'Storage Blob Data Contributor' role to $labUserUPN on $storageAccount"
+    } else {
+        Write-Log "[ERROR] Could not find user $labUserUPN"
+    }
+} catch {
+    Write-Log "[ERROR] Failed to assign 'Storage Blob Data Contributor' role to $labUserUPN: $_"
+}
+
+
 $ingestionFunc = az resource list --resource-group $resourceGroup `
     --resource-type "Microsoft.Web/sites" `
     --query "[?contains(name, 'inges')].name" -o tsv
