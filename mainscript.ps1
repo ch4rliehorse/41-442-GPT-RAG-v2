@@ -76,7 +76,7 @@ $envFile = Join-Path $deployPath ".azure\dev-$labInstanceId\.env"
 if (Test-Path $envFile) {
     $envContent = Get-Content $envFile
     if ($envContent -notmatch "^AZURE_NETWORK_ISOLATION=") {
-        Add-Content $envFile "nAZURE_NETWORK_ISOLATION=true"
+        Add-Content $envFile "`nAZURE_NETWORK_ISOLATION=true"
         Write-Log "Enabled AZURE_NETWORK_ISOLATION"
     }
 }
@@ -138,8 +138,8 @@ Write-Log "Set resource group: $resourceGroup"
 # === Retry OpenAI provisioning after azd provision ===
 Write-Log "Checking OpenAI provisioning state after provisioning..."
 
-$openAiAccountName = az resource list --resource-group $resourceGroup 
-    --resource-type "Microsoft.CognitiveServices/accounts" 
+$openAiAccountName = az resource list --resource-group $resourceGroup `
+    --resource-type "Microsoft.CognitiveServices/accounts" `
     --query "[?contains(name, 'oai0')].name" -o tsv
 
 $openAiProvisioningState = ""
@@ -153,9 +153,9 @@ for ($i = 1; $i -le $maxAttempts; $i++) {
     }
 
     try {
-        $openAiProvisioningState = az cognitiveservices account show 
-            --name $openAiAccountName 
-            --resource-group $resourceGroup 
+        $openAiProvisioningState = az cognitiveservices account show `
+            --name $openAiAccountName `
+            --resource-group $resourceGroup `
             --query "provisioningState" -o tsv
 
         Write-Log "Post-provision OpenAI provisioning state: $openAiProvisioningState (Attempt $i)"
@@ -174,26 +174,26 @@ if ($openAiProvisioningState -ne "Succeeded") {
     Write-Log "[WARNING] OpenAI resource not in 'Succeeded' state — running fallback OpenAI provisioning script."
 
     $fallbackScriptPath = "$env:TEMP\openai.ps1"
-    Invoke-WebRequest 
-        -Uri "https://raw.githubusercontent.com/LODSContent/ProServ/refs/heads/main/41-442%20MS%20RAG%20GPT/openai.ps1" 
+    Invoke-WebRequest `
+        -Uri "https://raw.githubusercontent.com/LODSContent/ProServ/refs/heads/main/41-442%20MS%20RAG%20GPT/openai.ps1" `
         -OutFile $fallbackScriptPath -UseBasicParsing
 
-    & $fallbackScriptPath 
-        -subscriptionId $subscriptionId 
-        -resourceGroup $resourceGroup 
-        -location $location 
-        -labInstanceId $labInstanceId 
-        -clientId $clientId 
-        -clientSecret $clientSecret 
-        -tenantId $tenantId 
+    & $fallbackScriptPath `
+        -subscriptionId $subscriptionId `
+        -resourceGroup $resourceGroup `
+        -location $location `
+        -labInstanceId $labInstanceId `
+        -clientId $clientId `
+        -clientSecret $clientSecret `
+        -tenantId $tenantId `
         -logFile $logFile
 
     Write-Log "Retry fallback OpenAI provisioning executed"
 }
 
 # Find the Key Vault with a name starting with 'bastionkv'
-$bastionKvName = az resource list --resource-group $resourceGroup 
-    --resource-type "Microsoft.KeyVault/vaults" 
+$bastionKvName = az resource list --resource-group $resourceGroup `
+    --resource-type "Microsoft.KeyVault/vaults" `
     --query "[?starts_with(name, 'bastionkv')].name" -o tsv
 
 if ($bastionKvName) {
@@ -204,10 +204,10 @@ if ($bastionKvName) {
         $labUserObjectId = az ad user show --id $labUserUPN --query id -o tsv
 
         if ($labUserObjectId) {
-            az role assignment create 
-                --assignee-object-id $labUserObjectId 
-                --assignee-principal-type User 
-                --role "Key Vault Secrets User" 
+            az role assignment create `
+                --assignee-object-id $labUserObjectId `
+                --assignee-principal-type User `
+                --role "Key Vault Secrets User" `
                 --scope $bastionKvScope | Out-Null
 
             Write-Log "Assigned 'Key Vault Secrets User' role to $labUserUPN on $bastionKvName"
@@ -224,54 +224,54 @@ if ($bastionKvName) {
 
 
 # Retry OpenAI provisioning
-$openAiAccountName = az resource list --resource-group $resourceGroup 
-    --resource-type "Microsoft.CognitiveServices/accounts" 
+$openAiAccountName = az resource list --resource-group $resourceGroup `
+    --resource-type "Microsoft.CognitiveServices/accounts" `
     --query "[?contains(name, 'oai0')].name" -o tsv
 
 $provisioningState = ""
 if ($openAiAccountName) {
-    $provisioningState = az cognitiveservices account show 
-        --name $openAiAccountName 
-        --resource-group $resourceGroup 
+    $provisioningState = az cognitiveservices account show `
+        --name $openAiAccountName `
+        --resource-group $resourceGroup `
         --query "provisioningState" -o tsv
 }
 
 if (-not $openAiAccountName -or $provisioningState -ne "Succeeded") {
     $fallbackScriptPath = "$env:TEMP\openai.ps1"
-    Invoke-WebRequest 
-        -Uri "https://raw.githubusercontent.com/LODSContent/ProServ/refs/heads/main/41-442%20MS%20RAG%20GPT/openai.ps1" 
+    Invoke-WebRequest `
+        -Uri "https://raw.githubusercontent.com/LODSContent/ProServ/refs/heads/main/41-442%20MS%20RAG%20GPT/openai.ps1" `
         -OutFile $fallbackScriptPath -UseBasicParsing
 
-    & $fallbackScriptPath 
-        -subscriptionId $subscriptionId 
-        -resourceGroup $resourceGroup 
-        -location $location 
-        -labInstanceId $labInstanceId 
-        -clientId $clientId 
-        -clientSecret $clientSecret 
-        -tenantId $tenantId 
+    & $fallbackScriptPath `
+        -subscriptionId $subscriptionId `
+        -resourceGroup $resourceGroup `
+        -location $location `
+        -labInstanceId $labInstanceId `
+        -clientId $clientId `
+        -clientSecret $clientSecret `
+        -tenantId $tenantId `
         -logFile $logFile
     Write-Log "Retry fallback OpenAI provisioning executed"
 }
-$storageAccount = az resource list --resource-group $resourceGroup 
-    --resource-type "Microsoft.Storage/storageAccounts" 
+$storageAccount = az resource list --resource-group $resourceGroup `
+    --resource-type "Microsoft.Storage/storageAccounts" `
     --query "sort_by([?type=='Microsoft.Storage/storageAccounts'], &length(name))[0].name" -o tsv
 
 $objectId = az ad sp show --id $clientId --query id -o tsv
 
-az role assignment create 
-    --assignee-object-id $objectId 
-    --assignee-principal-type ServicePrincipal 
-    --role "Storage Blob Data Contributor" 
+az role assignment create `
+    --assignee-object-id $objectId `
+    --assignee-principal-type ServicePrincipal `
+    --role "Storage Blob Data Contributor" `
     --scope "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Storage/storageAccounts/$storageAccount" | Out-Null
 
 Write-Log "Assigned Storage Blob Data Contributor"
 
-$ingestionFunc = az resource list --resource-group $resourceGroup 
-    --resource-type "Microsoft.Web/sites" 
+$ingestionFunc = az resource list --resource-group $resourceGroup `
+    --resource-type "Microsoft.Web/sites" `
     --query "[?contains(name, 'inges')].name" -o tsv
-$orchestratorFunc = az resource list --resource-group $resourceGroup 
-    --resource-type "Microsoft.Web/sites" 
+$orchestratorFunc = az resource list --resource-group $resourceGroup `
+    --resource-type "Microsoft.Web/sites" `
     --query "[?contains(name, 'orch')].name" -o tsv
 
 if ($ingestionFunc) {
@@ -284,8 +284,8 @@ if ($orchestratorFunc) {
 }
 Write-Log "Function apps updated"
 
-$webAppName = az resource list --resource-group $resourceGroup 
-    --resource-type "Microsoft.Web/sites" 
+$webAppName = az resource list --resource-group $resourceGroup `
+    --resource-type "Microsoft.Web/sites" `
     --query "[?contains(name, 'webgpt')].name" -o tsv
 
 if ($webAppName) {
