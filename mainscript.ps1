@@ -127,11 +127,50 @@ Write-Log "Starting azd provision"
 azd provision --environment dev-$labInstanceId 2>&1 | Tee-Object -FilePath $logFile -Append
 Write-Log "azd provision complete"
 $resourceGroup = az group list --query "[?contains(name, 'rg-dev-$labInstanceId')].name" -o tsv
-azd env set AZURE_RESOURCE_GROUP $resourceGroup | Out-Null
-Write-Log "Set resource group: $resourceGroup"
 
-Write-Log "azd provision complete"
-$resourceGroup = az group list --query "[?contains(name, 'rg-dev-$labInstanceId')].name" -o tsv
+Write-Log "Checking for failed resources after provisioning..."
+
+# List any failed resources in the resource group
+$failedResources = az resource list --resource-group $resourceGroup `
+    --query "[?provisioningState=='Failed']" -o json | ConvertFrom-Json
+
+if ($failedResources.Count -gt 0) {
+    Write-Log "[ERROR] Found failed resources:"
+    foreach ($res in $failedResources) {
+        Write-Log " - $($res.type): $($res.name)"
+    }
+} else {
+    Write-Log "No failed resources found."
+}
+
+# Try to get the most recent deployment name (usually named 'main' if using azd)
+$deploymentName = az deployment group list --resource-group $resourceGroup `
+    --query "[?contains(name, 'main')].name" -o tsv
+
+if ($deploymentName) {
+    try {
+        $errorDetails = az deployment group show --resource-group $resourceGroup `
+            --name $deploymentName `
+            --query "properties.error" -o json | ConvertFrom-Json
+
+        if ($errorDetails -ne $null) {
+            Write-Log "[ERROR] Deployment error: $($errorDetails.message)"
+            if ($errorDetails.details) {
+                foreach ($detail in $errorDetails.details) {
+                    Write-Log "  - $($detail.message)"
+                }
+            }
+        } else {
+            Write-Log "No top-level error message in deployment output."
+        }
+    } catch {
+        Write-Log "[ERROR] Failed to retrieve deployment error details: $_"
+    }
+} else {
+    Write-Log "No deployment named 'main' found in resource group."
+}
+
+
 azd env set AZURE_RESOURCE_GROUP $resourceGroup | Out-Null
 Write-Log "Set resource group: $resourceGroup"
 
