@@ -260,6 +260,28 @@ if ($bastionKvName) {
     Write-Log "[ERROR] Could not find Bastion Key Vault in resource group $resourceGroup"
 }
 
+# === Assign Search Service Contributor role to lab user ===
+$labUserUPN = "User1-$labInstanceId@lodsprodmca.onmicrosoft.com"
+$labUserObjectId = az ad user show --id $labUserUPN --query id -o tsv
+
+$searchServiceName = az resource list `
+    --resource-group $resourceGroup `
+    --resource-type "Microsoft.Search/searchServices" `
+    --query "[0].name" -o tsv
+
+if ($labUserObjectId -and $searchServiceName) {
+    $searchScope = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Search/searchServices/$searchServiceName"
+
+    az role assignment create `
+        --assignee-object-id $labUserObjectId `
+        --assignee-principal-type User `
+        --role "Search Service Contributor" `
+        --scope $searchScope | Out-Null
+
+    Write-Log "Assigned 'Search Service Contributor' role to $labUserUPN on $searchServiceName"
+} else {
+    Write-Log "[ERROR] Could not retrieve lab user object ID or search service name for RBAC assignment."
+}
 
 
 # Retry OpenAI provisioning
