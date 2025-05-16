@@ -306,6 +306,26 @@ az role assignment create `
 
 Write-Log "Assigned Storage Blob Data Contributor"
 
+# === Assign RBAC to user on Storage Account ===
+$labUserUPN = "User1-$labInstanceId@lodsprodmca.onmicrosoft.com"
+try {
+    $labUserObjectId = az ad user show --id $labUserUPN --query id -o tsv
+
+    if ($labUserObjectId) {
+        az role assignment create `
+            --assignee-object-id $labUserObjectId `
+            --assignee-principal-type User `
+            --role "Storage Blob Data Contributor" `
+            --scope "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Storage/storageAccounts/$storageAccount" | Out-Null
+
+        Write-Log "Assigned 'Storage Blob Data Contributor' role to $labUserUPN on $storageAccount"
+    } else {
+        Write-Log "[ERROR] Could not find lab user $labUserUPN"
+    }
+} catch {
+    Write-Log "[ERROR] Failed to assign RBAC on Storage Account: $_"
+}
+
 $ingestionFunc = az resource list --resource-group $resourceGroup `
     --resource-type "Microsoft.Web/sites" `
     --query "[?contains(name, 'inges')].name" -o tsv
