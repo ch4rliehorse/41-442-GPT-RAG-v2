@@ -332,6 +332,29 @@ $storageAccount = az resource list --resource-group $resourceGroup `
     --resource-type "Microsoft.Storage/storageAccounts" `
     --query "sort_by([?type=='Microsoft.Storage/storageAccounts'], &length(name))[0].name" -o tsv
 
+# Get the connection string from the storage account
+$storageConnStr = az storage account show-connection-string `
+    --name $storageAccount `
+    --resource-group $resourceGroup `
+    --query connectionString -o tsv
+
+# Set it on each Function App (dataIngest and orchestrator)
+if ($ingestionFunc) {
+    az functionapp config appsettings set `
+        --name $ingestionFunc `
+        --resource-group $resourceGroup `
+        --settings AzureWebJobsStorage="$storageConnStr" | Out-Null
+    Write-Log "Set AzureWebJobsStorage for $ingestionFunc"
+}
+
+if ($orchestratorFunc) {
+    az functionapp config appsettings set `
+        --name $orchestratorFunc `
+        --resource-group $resourceGroup `
+        --settings AzureWebJobsStorage="$storageConnStr" | Out-Null
+    Write-Log "Set AzureWebJobsStorage for $orchestratorFunc"
+}
+
 $objectId = az ad sp show --id $clientId --query id -o tsv
 
 az role assignment create `
