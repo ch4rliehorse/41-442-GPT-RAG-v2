@@ -126,6 +126,20 @@ Write-Log "Successfully set deploymentTags: LabInstance = $labInstanceId"
 Write-Log "Starting azd provision"
 azd provision --environment dev-$labInstanceId 2>&1 | Tee-Object -FilePath $logFile -Append
 Write-Log "azd provision complete"
+
+# Assign Contributor role to service principal on the resource group
+try {
+    az role assignment create `
+        --assignee $clientId `
+        --assignee-principal-type ServicePrincipal `
+        --role "Contributor" `
+        --scope "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup" | Out-Null
+
+    Write-Log "Assigned Contributor role to service principal on resource group: $resourceGroup"
+} catch {
+    Write-Log "[ERROR] Failed to assign Contributor role: $_"
+}
+
 $resourceGroup = az group list --query "[?contains(name, 'rg-dev-$labInstanceId')].name" -o tsv
 
 Write-Log "Checking for failed resources after provisioning..."
